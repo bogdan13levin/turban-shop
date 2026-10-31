@@ -2513,3 +2513,315 @@ document.addEventListener('click', event => {
 setupOrderArchive();
 
 console.log('Turban Shop 4.6 — архив заказов подключён');
+
+/* ==========================================
+   TURBAN SHOP 4.7
+   ПОИСК И ФИЛЬТРЫ АДМИНКИ
+   ========================================== */
+
+(function () {
+  'use strict';
+
+  const state = {
+    search: '',
+    availability: 'all',
+    publication: 'all',
+    sort: 'name'
+  };
+
+  const LOW_STOCK = 3;
+
+  function createControls() {
+    if (document.getElementById('adminCatalog47')) {
+      return;
+    }
+
+    const list = document.getElementById('adminList');
+    if (!list) return;
+
+    const panel = document.createElement('section');
+    panel.id = 'adminCatalog47';
+
+    panel.style.cssText = `
+      margin: 20px 0;
+      padding: 16px;
+      border: 1px solid #40354c;
+      border-radius: 14px;
+    `;
+
+    panel.innerHTML = `
+      <h3 style="margin:0 0 14px">
+        Управление каталогом
+      </h3>
+
+      <div id="adminStats47"
+           class="muted"
+           style="margin-bottom:14px">
+      </div>
+
+      <input
+        id="adminSearch47"
+        type="search"
+        placeholder="Поиск по названию..."
+        autocomplete="off"
+        style="
+          width:100%;
+          box-sizing:border-box;
+          padding:12px;
+          border-radius:10px;
+          border:1px solid #40354c;
+          background:#17131e;
+          color:white;
+          font:inherit;
+          margin-bottom:12px;
+        "
+      >
+
+      <label style="display:block;margin-bottom:12px">
+        Наличие
+        <select id="adminStock47" style="
+          display:block;
+          width:100%;
+          padding:12px;
+          margin-top:6px;
+          border-radius:10px;
+          background:#17131e;
+          color:white;
+          border:1px solid #40354c;
+        ">
+          <option value="all">Все товары</option>
+          <option value="available">В наличии</option>
+          <option value="low">Мало на складе</option>
+          <option value="out">Нет в наличии</option>
+        </select>
+      </label>
+
+      <label style="display:block;margin-bottom:12px">
+        Публикация
+        <select id="adminPublished47" style="
+          display:block;
+          width:100%;
+          padding:12px;
+          margin-top:6px;
+          border-radius:10px;
+          background:#17131e;
+          color:white;
+          border:1px solid #40354c;
+        ">
+          <option value="all">Все</option>
+          <option value="published">Опубликованные</option>
+          <option value="hidden">Скрытые</option>
+        </select>
+      </label>
+
+      <label style="display:block;margin-bottom:12px">
+        Сортировка
+        <select id="adminSort47" style="
+          display:block;
+          width:100%;
+          padding:12px;
+          margin-top:6px;
+          border-radius:10px;
+          background:#17131e;
+          color:white;
+          border:1px solid #40354c;
+        ">
+          <option value="name">По названию А–Я</option>
+          <option value="nameDesc">По названию Я–А</option>
+          <option value="priceAsc">Цена: сначала дешевле</option>
+          <option value="priceDesc">Цена: сначала дороже</option>
+          <option value="stockAsc">Остаток: по возрастанию</option>
+          <option value="stockDesc">Остаток: по убыванию</option>
+        </select>
+      </label>
+
+      <button
+        id="adminReset47"
+        class="secondary"
+        type="button"
+        style="width:100%"
+      >
+        Сбросить фильтры
+      </button>
+
+      <p id="adminResults47"
+         class="muted"
+         style="margin:12px 0 0">
+      </p>
+    `;
+
+    list.parentNode.insertBefore(panel, list);
+
+    document.getElementById('adminSearch47')
+      .addEventListener('input', event => {
+        state.search = event.target.value
+          .trim()
+          .toLocaleLowerCase('ru');
+        renderAdminProducts();
+      });
+
+    document.getElementById('adminStock47')
+      .addEventListener('change', event => {
+        state.availability = event.target.value;
+        renderAdminProducts();
+      });
+
+    document.getElementById('adminPublished47')
+      .addEventListener('change', event => {
+        state.publication = event.target.value;
+        renderAdminProducts();
+      });
+
+    document.getElementById('adminSort47')
+      .addEventListener('change', event => {
+        state.sort = event.target.value;
+        renderAdminProducts();
+      });
+
+    document.getElementById('adminReset47')
+      .addEventListener('click', () => {
+        state.search = '';
+        state.availability = 'all';
+        state.publication = 'all';
+        state.sort = 'name';
+
+        document.getElementById('adminSearch47').value = '';
+        document.getElementById('adminStock47').value = 'all';
+        document.getElementById('adminPublished47').value = 'all';
+        document.getElementById('adminSort47').value = 'name';
+
+        renderAdminProducts();
+      });
+  }
+
+  function getVisibleProducts() {
+    let result = adminProducts.filter(product => {
+      const name = product.name
+        .toLocaleLowerCase('ru');
+
+      if (!name.includes(state.search)) return false;
+
+      if (
+        state.availability === 'available' &&
+        product.stock <= 0
+      ) return false;
+
+      if (
+        state.availability === 'low' &&
+        !(product.stock > 0 && product.stock <= LOW_STOCK)
+      ) return false;
+
+      if (
+        state.availability === 'out' &&
+        product.stock !== 0
+      ) return false;
+
+      if (
+        state.publication === 'published' &&
+        !product.isPublished
+      ) return false;
+
+      if (
+        state.publication === 'hidden' &&
+        product.isPublished
+      ) return false;
+
+      return true;
+    });
+
+    result = [...result];
+
+    const compareNames = (a, b) =>
+      a.name.localeCompare(b.name, 'ru');
+
+    switch (state.sort) {
+      case 'name':
+        result.sort(compareNames);
+        break;
+      case 'nameDesc':
+        result.sort((a, b) => compareNames(b, a));
+        break;
+      case 'priceAsc':
+        result.sort((a, b) =>
+          a.price - b.price || compareNames(a, b)
+        );
+        break;
+      case 'priceDesc':
+        result.sort((a, b) =>
+          b.price - a.price || compareNames(a, b)
+        );
+        break;
+      case 'stockAsc':
+        result.sort((a, b) =>
+          a.stock - b.stock || compareNames(a, b)
+        );
+        break;
+      case 'stockDesc':
+        result.sort((a, b) =>
+          b.stock - a.stock || compareNames(a, b)
+        );
+        break;
+    }
+
+    return result;
+  }
+
+  const originalRender47 = renderAdminProducts;
+
+  renderAdminProducts = function () {
+    createControls();
+
+    const all = adminProducts;
+    const visible = getVisibleProducts();
+
+    const published = all.filter(p => p.isPublished).length;
+    const hidden = all.length - published;
+    const low = all.filter(
+      p => p.stock > 0 && p.stock <= LOW_STOCK
+    ).length;
+    const out = all.filter(p => p.stock === 0).length;
+
+    const stats = document.getElementById('adminStats47');
+
+    if (stats) {
+      stats.textContent =
+        `Всего: ${all.length} · ` +
+        `Опубликовано: ${published} · ` +
+        `Скрыто: ${hidden} · ` +
+        `Мало: ${low} · ` +
+        `Нет в наличии: ${out}`;
+    }
+
+    adminProducts = visible;
+
+    try {
+      originalRender47();
+    } finally {
+      adminProducts = all;
+    }
+
+    const results = document.getElementById('adminResults47');
+
+    if (results) {
+      results.textContent =
+        `Показано: ${visible.length} из ${all.length}`;
+    }
+
+    if (visible.length === 0) {
+      const list = document.getElementById('adminList');
+
+      if (list) {
+        list.innerHTML = empty(
+          'Товары не найдены',
+          'Попробуй изменить поиск или фильтры.'
+        );
+      }
+    }
+  };
+
+  createControls();
+
+  console.log(
+    'Turban Shop 4.7 — фильтры каталога подключены'
+  );
+})();
