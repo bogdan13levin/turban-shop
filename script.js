@@ -1,8 +1,8 @@
 
 'use strict';
 
-// TURBAN SHOP 4.2
-// Supabase Auth + управление каталогом + Storage
+// TURBAN SHOP 4.3
+// Каталог, избранное, админка, фотографии и корзина
 
 const SUPABASE_URL =
   'https://tlrkdikpmcbfbcazwnae.supabase.co';
@@ -28,19 +28,28 @@ const db = window.supabase.createClient(
 );
 
 const FAV_KEY = 'turban-demo-favorites-v2';
+const CART_KEY = 'turban-cart-v1';
 
-function readFavorites() {
+function readJSON(key, fallback) {
   try {
-    const data = JSON.parse(localStorage.getItem(FAV_KEY) || '[]');
-    return Array.isArray(data) ? data.map(String) : [];
+    const data = JSON.parse(localStorage.getItem(key) || 'null');
+    return data ?? fallback;
   } catch {
-    return [];
+    return fallback;
   }
 }
 
 let products = [];
 let adminProducts = [];
-let favorites = readFavorites();
+
+let favorites = readJSON(FAV_KEY, []);
+if (!Array.isArray(favorites)) favorites = [];
+favorites = favorites.map(String);
+
+let cart = readJSON(CART_KEY, {});
+if (!cart || typeof cart !== 'object' || Array.isArray(cart)) {
+  cart = {};
+}
 
 let filter = 'all';
 let currentPage = 'home';
@@ -76,17 +85,43 @@ function safePhoto(value) {
   }
 }
 
+function empty(title, description) {
+  return `<div class="empty">
+    <strong>${escapeHTML(title)}</strong>
+    ${escapeHTML(description)}
+  </div>`;
+}
+
 function findProduct(id) {
   return products.find(p => p.id === String(id));
 }
 
-function empty(title, description) {
-  return `
-    <div class="empty">
-      <strong>${escapeHTML(title)}</strong>
-      ${escapeHTML(description)}
-    </div>
-  `;
+function saveCart() {
+  try {
+    localStorage.setItem(CART_KEY, JSON.stringify(cart));
+  } catch (error) {
+    console.warn('Не удалось сохранить корзину:', error);
+  }
+}
+
+function cartCount() {
+  return Object.values(cart).reduce((sum, quantity) => {
+    const n = Number(quantity);
+    return sum + (Number.isSafeInteger(n) && n > 0 ? n : 0);
+  }, 0);
+}
+
+function updateCartBadge() {
+  const button = document.querySelector('[data-page="cart"]');
+  if (!button) return;
+
+  const count = cartCount();
+  const badge = button.querySelector('.cart-count');
+
+  if (badge) {
+    badge.textContent = count > 99 ? '99+' : String(count);
+    badge.hidden = count === 0;
+  }
 }
 
 function showPage(page) {
@@ -105,6 +140,7 @@ function showPage(page) {
   });
 
   if (page === 'favorites') renderFavorites();
+  if (page === 'cart') renderCart();
 
   window.scrollTo(0, 0);
 }
@@ -116,19 +152,16 @@ function productCard(p) {
   return `
     <article class="product">
       <div class="product-photo" data-open="${escapeHTML(p.id)}">
-        ${
-          photo
-            ? `<img src="${escapeHTML(photo)}"
-                 alt="${escapeHTML(p.name)}"
-                 loading="lazy">`
-            : '<span>ФОТО</span>'
-        }
+        ${photo
+          ? `<img src="${escapeHTML(photo)}"
+              alt="${escapeHTML(p.name)}" loading="lazy">`
+          : '<span>ФОТО</span>'}
 
-        <button
-          class="favorite-btn ${saved ? 'saved' : ''}"
+        <button class="favorite-btn ${saved ? 'saved' : ''}"
           data-fav="${escapeHTML(p.id)}"
-          aria-label="Избранное"
-        >${saved ? '♥' : '♡'}</button>
+          aria-label="Избранное">
+          ${saved ? '♥' : '♡'}
+        </button>
       </div>
 
       <div class="product-info" data-open="${escapeHTML(p.id)}">
@@ -136,8 +169,7 @@ function productCard(p) {
         <div class="product-description">${escapeHTML(p.description)}</div>
         <div class="product-price">${money(p.price)}</div>
       </div>
-    </article>
-  `;
+    </article>`;
 }
 
 function render() {
@@ -147,32 +179,22 @@ function render() {
       ? empty('Не удалось загрузить товары', loadError)
       : '';
 
-  const newProducts = products
-    .filter(p => p.category === 'new')
-    .slice(0, 4);
+  const sections = [
+    ['homeNew', 'new', 'Новинок пока нет'],
+    ['homePopular', 'popular', 'Популярных товаров пока нет'],
+    ['homeSale', 'sale', 'Скидок пока нет']
+  ];
 
-  const popularProducts = products
-    .filter(p => p.category === 'popular')
-    .slice(0, 4);
+  sections.forEach(([elementId, category, title]) => {
+    const items = products
+      .filter(p => p.category === category)
+      .slice(0, 4);
 
-  const saleProducts = products
-    .filter(p => p.category === 'sale')
-    .slice(0, 4);
-
-  $('homeNew').innerHTML =
-    status ||
-    newProducts.map(productCard).join('') ||
-    empty('Новинок пока нет', 'Они появятся после публикации.');
-
-  $('homePopular').innerHTML =
-    status ||
-    popularProducts.map(productCard).join('') ||
-    empty('Пока пусто', 'Популярные товары появятся здесь.');
-
-  $('homeSale').innerHTML =
-    status ||
-    saleProducts.map(productCard).join('') ||
-    empty('Скидок пока нет', 'Товары со скидками появятся здесь.');
+    $(elementId).innerHTML =
+      status ||
+      items.map(productCard).join('') ||
+      empty(title, 'Товары появятся после публикации.');
+  });
 
   const query = $('search').value.trim().toLocaleLowerCase('ru');
 
@@ -193,6 +215,8 @@ function render() {
     empty('Каталог пока пуст', 'Опубликованные товары появятся здесь.');
 
   renderFavorites();
+  renderCart();
+  updateCartBadge();
 }
 
 function renderFavorites() {
@@ -224,6 +248,131 @@ function toggleFavorite(id) {
   }
 }
 
+function addToCart(id) {
+  const p = findProduct(id);
+
+  if (!p || p.stock <= 0) {
+    alert('Товара нет в наличии.');
+    return;
+  }
+
+  const current = Number(cart[p.id] || 0);
+
+  if (current >= p.stock) {
+    alert('Нельзя добавить больше доступного остатка.');
+    return;
+  }
+
+  cart[p.id] = current + 1;
+  saveCart();
+  renderCart();
+  updateCartBadge();
+
+  if (currentPage === 'detail') renderDetail(p.id);
+}
+
+function changeCartQuantity(id, delta) {
+  const p = findProduct(id);
+  if (!p) return;
+
+  const current = Number(cart[p.id] || 0);
+  const next = current + delta;
+
+  if (next <= 0) {
+    delete cart[p.id];
+  } else if (next <= p.stock) {
+    cart[p.id] = next;
+  } else {
+    alert('Недостаточно товара в наличии.');
+    return;
+  }
+
+  saveCart();
+  renderCart();
+  updateCartBadge();
+
+  if (currentPage === 'detail') renderDetail(p.id);
+}
+
+function removeFromCart(id) {
+  delete cart[String(id)];
+  saveCart();
+  renderCart();
+  updateCartBadge();
+}
+
+function renderCart() {
+  const container = $('cartItems');
+  if (!container) return;
+
+  if (loading) {
+    container.innerHTML = empty('Загрузка корзины', 'Подожди немного…');
+    return;
+  }
+
+  let total = 0;
+  let count = 0;
+
+  const entries = Object.entries(cart)
+    .map(([id, quantity]) => ({
+      product: findProduct(id),
+      quantity: Number(quantity)
+    }))
+    .filter(item => item.product && item.quantity > 0);
+
+  if (!entries.length) {
+    container.innerHTML = empty(
+      'Корзина пуста',
+      'Добавь товары из каталога.'
+    );
+    $('cartTotal').textContent = money(0);
+    $('cartSummary').hidden = true;
+    return;
+  }
+
+  const html = entries.map(({ product: p, quantity }) => {
+    const available = Math.max(0, p.stock);
+    const effectiveQuantity = Math.min(quantity, available);
+
+    total += p.price * effectiveQuantity;
+    count += effectiveQuantity;
+
+    return `
+      <div class="profile" style="margin-bottom:12px;align-items:flex-start;">
+        <div class="avatar" style="overflow:hidden;flex-shrink:0;">
+          ${p.photo
+            ? `<img src="${escapeHTML(p.photo)}" alt=""
+                style="width:100%;height:100%;object-fit:cover;">`
+            : '▦'}
+        </div>
+
+        <div style="flex:1;min-width:0;">
+          <strong>${escapeHTML(p.name)}</strong>
+          <p>${money(p.price)} за шт.</p>
+
+          ${quantity > available
+            ? `<p class="muted">Доступно только ${available} шт.</p>`
+            : ''}
+
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">
+            <button type="button" class="secondary"
+              data-cart-minus="${escapeHTML(p.id)}">−</button>
+            <strong>${quantity}</strong>
+            <button type="button" class="secondary"
+              data-cart-plus="${escapeHTML(p.id)}">+</button>
+            <button type="button" class="secondary"
+              data-cart-remove="${escapeHTML(p.id)}">Удалить</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  container.innerHTML = html;
+  $('cartTotal').textContent = money(total);
+  $('cartCountText').textContent = `${count} шт.`;
+  $('cartSummary').hidden = false;
+}
+
 function renderDetail(id) {
   const p = findProduct(id);
   if (!p) return;
@@ -232,23 +381,20 @@ function renderDetail(id) {
 
   const photo = safePhoto(p.photo);
   const saved = favorites.includes(p.id);
+  const quantity = Number(cart[p.id] || 0);
 
   $('detailView').innerHTML = `
     <div class="detail-photo">
-      ${
-        photo
-          ? `<img src="${escapeHTML(photo)}"
-                 alt="${escapeHTML(p.name)}">`
-          : 'Фото не добавлено'
-      }
+      ${photo
+        ? `<img src="${escapeHTML(photo)}"
+            alt="${escapeHTML(p.name)}">`
+        : 'Фото не добавлено'}
     </div>
 
     <h1>${escapeHTML(p.name)}</h1>
-
     <p class="muted">
       ${escapeHTML(p.description || 'Описание пока не добавлено.')}
     </p>
-
     <p class="detail-price">${money(p.price)}</p>
 
     <p class="muted">
@@ -257,7 +403,17 @@ function renderDetail(id) {
         : 'Нет в наличии'}
     </p>
 
-    <button class="primary" data-fav="${escapeHTML(p.id)}">
+    <button class="primary"
+      data-add-cart="${escapeHTML(p.id)}"
+      ${p.stock <= 0 ? 'disabled' : ''}>
+      ${p.stock <= 0 ? 'Нет в наличии' : 'Добавить в корзину'}
+    </button>
+
+    ${quantity > 0
+      ? `<p class="muted">В корзине: ${quantity} шт.</p>`
+      : ''}
+
+    <button class="secondary" data-fav="${escapeHTML(p.id)}">
       ${saved
         ? '♥ Убрать из избранного'
         : '♡ Добавить в избранное'}
@@ -292,9 +448,7 @@ async function loadProducts() {
   try {
     const { data, error } = await db
       .from('products')
-      .select(
-        'id,name,description,price,stock,category,image_url,is_published'
-      )
+      .select('id,name,description,price,stock,category,image_url,is_published')
       .eq('is_published', true)
       .order('created_at', { ascending: false });
 
@@ -354,7 +508,6 @@ function setAdminStatus(message) {
 
 function setAdminBusy(busy) {
   adminBusy = busy;
-
   $('saveButton').disabled = busy;
   $('resetForm').disabled = busy;
   $('refreshAdmin').disabled = busy;
@@ -364,15 +517,12 @@ function setAdminBusy(busy) {
 async function loadAdminProducts() {
   if (!isAdmin) return;
 
-  $('adminList').innerHTML =
-    empty('Загрузка товаров', 'Подожди немного…');
+  $('adminList').innerHTML = empty('Загрузка товаров', 'Подожди немного…');
 
   try {
     const { data, error } = await db
       .from('products')
-      .select(
-        'id,name,description,price,stock,category,image_url,is_published'
-      )
+      .select('id,name,description,price,stock,category,image_url,is_published')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -381,11 +531,8 @@ async function loadAdminProducts() {
     renderAdminProducts();
   } catch (error) {
     console.error('Ошибка админ-каталога:', error);
-
-    $('adminList').innerHTML = empty(
-      'Не удалось загрузить товары',
-      'Проверь RLS и права администратора.'
-    );
+    $('adminList').innerHTML =
+      empty('Не удалось загрузить товары', 'Проверь RLS и права администратора.');
   }
 }
 
@@ -393,11 +540,8 @@ function renderAdminProducts() {
   if (!isAdmin) return;
 
   $('adminList').innerHTML = adminProducts.map(p => `
-    <div class="profile"
-      style="margin-bottom:12px;align-items:flex-start;">
-
-      <div class="avatar"
-        style="overflow:hidden;flex-shrink:0;">
+    <div class="profile" style="margin-bottom:12px;align-items:flex-start;">
+      <div class="avatar" style="overflow:hidden;flex-shrink:0;">
         ${p.photo
           ? `<img src="${escapeHTML(p.photo)}" alt=""
               style="width:100%;height:100%;object-fit:cover;">`
@@ -407,19 +551,15 @@ function renderAdminProducts() {
       <div style="flex:1;min-width:0;">
         <strong>${escapeHTML(p.name)}</strong>
         <p>${money(p.price)} · Остаток: ${p.stock}</p>
-        <p class="muted">
-          ${p.isPublished ? '● Опубликован' : '○ Скрыт'}
-        </p>
+        <p class="muted">${p.isPublished ? '● Опубликован' : '○ Скрыт'}</p>
 
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
           <button type="button" class="secondary"
             data-admin-edit="${escapeHTML(p.id)}">Изменить</button>
-
           <button type="button" class="secondary"
             data-admin-toggle="${escapeHTML(p.id)}">
             ${p.isPublished ? 'Скрыть' : 'Опубликовать'}
           </button>
-
           <button type="button" class="secondary"
             data-admin-delete="${escapeHTML(p.id)}">Удалить</button>
         </div>
@@ -443,12 +583,10 @@ function previewPhoto() {
 
   if (file) {
     previewObjectURL = URL.createObjectURL(file);
-
     $('photoPreview').innerHTML = `
       <img src="${escapeHTML(previewObjectURL)}"
-        alt="Предпросмотр фотографии"
-        style="max-width:100%;max-height:180px;object-fit:contain;">
-    `;
+        alt="Предпросмотр"
+        style="max-width:100%;max-height:180px;object-fit:contain;">`;
     return;
   }
 
@@ -465,10 +603,8 @@ function resetProductForm() {
   $('productForm').reset();
   $('editId').value = '';
   $('saveButton').textContent = 'Добавить товар';
-
   clearPreviewURL();
   $('photoPreview').textContent = 'Фото пока нет';
-
   setAdminStatus('');
 }
 
@@ -487,7 +623,6 @@ function editProduct(id) {
   $('isPublished').checked = p.isPublished;
 
   $('saveButton').textContent = 'Сохранить изменения';
-
   setAdminStatus('Редактирование: ' + p.name);
   previewPhoto();
 
@@ -510,19 +645,13 @@ function getProductPayload() {
     throw new Error('Введи название товара до 100 символов.');
   }
 
-  if (
-    $('price').value.trim() === '' ||
-    !Number.isFinite(price) ||
-    price < 0
-  ) {
+  if ($('price').value.trim() === '' ||
+      !Number.isFinite(price) || price < 0) {
     throw new Error('Укажи корректную цену.');
   }
 
-  if (
-    $('stock').value.trim() === '' ||
-    !Number.isSafeInteger(stock) ||
-    stock < 0
-  ) {
+  if ($('stock').value.trim() === '' ||
+      !Number.isSafeInteger(stock) || stock < 0) {
     throw new Error('Остаток должен быть целым неотрицательным числом.');
   }
 
@@ -548,22 +677,14 @@ function getProductPayload() {
 async function uploadProductPhoto(file) {
   if (!file) return null;
 
-  const allowedTypes = [
-    'image/jpeg',
-    'image/png',
-    'image/webp'
-  ];
+  const types = ['image/jpeg', 'image/png', 'image/webp'];
 
-  if (!allowedTypes.includes(file.type)) {
+  if (!types.includes(file.type)) {
     throw new Error('Поддерживаются только JPG, PNG и WebP.');
   }
 
-  if (file.size > MAX_PHOTO_SIZE) {
-    throw new Error('Фотография должна быть не больше 5 МБ.');
-  }
-
-  if (file.size === 0) {
-    throw new Error('Выбран пустой файл.');
+  if (file.size === 0 || file.size > MAX_PHOTO_SIZE) {
+    throw new Error('Размер фотографии должен быть от 1 байта до 5 МБ.');
   }
 
   const extension = {
@@ -572,8 +693,7 @@ async function uploadProductPhoto(file) {
     'image/webp': 'webp'
   }[file.type];
 
-  const uniqueId = crypto.randomUUID();
-  const path = `catalog/${uniqueId}.${extension}`;
+  const path = `catalog/${crypto.randomUUID()}.${extension}`;
 
   const { error } = await db.storage
     .from(BUCKET)
@@ -585,18 +705,13 @@ async function uploadProductPhoto(file) {
 
   if (error) throw error;
 
-  const { data } = db.storage
-    .from(BUCKET)
-    .getPublicUrl(path);
+  const { data } = db.storage.from(BUCKET).getPublicUrl(path);
 
   if (!data?.publicUrl) {
     throw new Error('Не удалось получить ссылку на фотографию.');
   }
 
-  return {
-    url: data.publicUrl,
-    path
-  };
+  return { url: data.publicUrl, path };
 }
 
 async function removeUploadedPhoto(path) {
@@ -606,14 +721,11 @@ async function removeUploadedPhoto(path) {
     .from(BUCKET)
     .remove([path]);
 
-  if (error) {
-    console.warn('Не удалось очистить фотографию:', error);
-  }
+  if (error) console.warn('Ошибка очистки фотографии:', error);
 }
 
 $('productForm').addEventListener('submit', async event => {
   event.preventDefault();
-
   if (!isAdmin || adminBusy) return;
 
   setAdminBusy(true);
@@ -629,7 +741,6 @@ $('productForm').addEventListener('submit', async event => {
 
     if (file) {
       setAdminStatus('Загружаем фотографию…');
-
       newUpload = await uploadProductPhoto(file);
       payload.image_url = newUpload.url;
     }
@@ -641,17 +752,12 @@ $('productForm').addEventListener('submit', async event => {
       : db.from('products').insert(payload);
 
     const { error } = await query;
-
     if (error) throw error;
 
     saved = true;
     resetProductForm();
 
-    await Promise.all([
-      loadAdminProducts(),
-      loadProducts()
-    ]);
-
+    await Promise.all([loadAdminProducts(), loadProducts()]);
     setAdminStatus('Товар успешно сохранён.');
   } catch (error) {
     console.error('Ошибка сохранения:', error);
@@ -660,9 +766,7 @@ $('productForm').addEventListener('submit', async event => {
       await removeUploadedPhoto(newUpload.path);
     }
 
-    setAdminStatus(
-      'Ошибка: ' + (error.message || 'Не удалось сохранить товар.')
-    );
+    setAdminStatus('Ошибка: ' + (error.message || 'Не удалось сохранить товар.'));
   } finally {
     setAdminBusy(false);
   }
@@ -685,11 +789,7 @@ async function togglePublished(id) {
 
     if (error) throw error;
 
-    await Promise.all([
-      loadAdminProducts(),
-      loadProducts()
-    ]);
-
+    await Promise.all([loadAdminProducts(), loadProducts()]);
     setAdminStatus('Статус публикации обновлён.');
   } catch (error) {
     console.error(error);
@@ -720,15 +820,7 @@ async function deleteProduct(id) {
 
     if ($('editId').value === p.id) resetProductForm();
 
-    await Promise.all([
-      loadAdminProducts(),
-      loadProducts()
-    ]);
-
-    // Файлы в Storage пока не удаляем автоматически:
-    // это исключает случайную потерю изображений,
-    // если они используются другими товарами.
-
+    await Promise.all([loadAdminProducts(), loadProducts()]);
     setAdminStatus('Товар удалён.');
   } catch (error) {
     console.error(error);
@@ -749,11 +841,7 @@ $('loginForm').addEventListener('submit', async event => {
   $('loginStatus').textContent = 'Проверяем данные…';
 
   try {
-    const { error } = await db.auth.signInWithPassword({
-      email,
-      password
-    });
-
+    const { error } = await db.auth.signInWithPassword({ email, password });
     if (error) throw error;
 
     const allowed = await checkAdmin();
@@ -769,7 +857,6 @@ $('loginForm').addEventListener('submit', async event => {
     $('loginStatus').textContent = '';
   } catch (error) {
     console.error('Ошибка входа:', error);
-
     $('loginStatus').textContent =
       'Не удалось войти. Проверь email и пароль.';
   } finally {
@@ -782,7 +869,6 @@ $('logoutButton').addEventListener('click', async () => {
 
   isAdmin = false;
   adminProducts = [];
-
   updateAdminUI();
   resetProductForm();
 
@@ -802,50 +888,42 @@ $('resetForm').addEventListener('click', resetProductForm);
 $('photo').addEventListener('change', previewPhoto);
 $('imageUrl').addEventListener('input', previewPhoto);
 
-$('refreshAdmin').addEventListener('click', async () => {
-  await loadAdminProducts();
-});
+$('refreshAdmin').addEventListener('click', loadAdminProducts);
 
 document.addEventListener('click', event => {
-  const adminEdit = event.target.closest('[data-admin-edit]');
-  if (adminEdit) {
-    editProduct(adminEdit.dataset.adminEdit);
-    return;
-  }
+  const edit = event.target.closest('[data-admin-edit]');
+  if (edit) return editProduct(edit.dataset.adminEdit);
 
-  const adminToggle = event.target.closest('[data-admin-toggle]');
-  if (adminToggle) {
-    togglePublished(adminToggle.dataset.adminToggle);
-    return;
-  }
+  const toggle = event.target.closest('[data-admin-toggle]');
+  if (toggle) return togglePublished(toggle.dataset.adminToggle);
 
-  const adminDelete = event.target.closest('[data-admin-delete]');
-  if (adminDelete) {
-    deleteProduct(adminDelete.dataset.adminDelete);
-    return;
-  }
+  const remove = event.target.closest('[data-admin-delete]');
+  if (remove) return deleteProduct(remove.dataset.adminDelete);
+
+  const add = event.target.closest('[data-add-cart]');
+  if (add) return addToCart(add.dataset.addCart);
+
+  const plus = event.target.closest('[data-cart-plus]');
+  if (plus) return changeCartQuantity(plus.dataset.cartPlus, 1);
+
+  const minus = event.target.closest('[data-cart-minus]');
+  if (minus) return changeCartQuantity(minus.dataset.cartMinus, -1);
+
+  const removeCart = event.target.closest('[data-cart-remove]');
+  if (removeCart) return removeFromCart(removeCart.dataset.cartRemove);
 
   const favorite = event.target.closest('[data-fav]');
-  if (favorite) {
-    toggleFavorite(favorite.dataset.fav);
-    return;
-  }
+  if (favorite) return toggleFavorite(favorite.dataset.fav);
 
   const product = event.target.closest('[data-open]');
-  if (product) {
-    openDetail(product.dataset.open);
-    return;
-  }
+  if (product) return openDetail(product.dataset.open);
 
   const navigation = event.target.closest('[data-page]');
   if (navigation) {
     if (navigation.dataset.goFilter) {
       filter = navigation.dataset.goFilter;
       document.querySelectorAll('[data-filter]').forEach(button => {
-        button.classList.toggle(
-          'active',
-          button.dataset.filter === filter
-        );
+        button.classList.toggle('active', button.dataset.filter === filter);
       });
       render();
     }
@@ -859,10 +937,7 @@ document.addEventListener('click', event => {
     filter = category.dataset.filter;
 
     document.querySelectorAll('[data-filter]').forEach(button => {
-      button.classList.toggle(
-        'active',
-        button.dataset.filter === filter
-      );
+      button.classList.toggle('active', button.dataset.filter === filter);
     });
 
     render();
@@ -873,11 +948,7 @@ document.addEventListener('click', event => {
 $('search').addEventListener('input', render);
 
 $('back').addEventListener('click', () => {
-  showPage(
-    previousPage === 'detail'
-      ? 'catalog'
-      : previousPage
-  );
+  showPage(previousPage === 'detail' ? 'catalog' : previousPage);
 });
 
 $('about').addEventListener('click', () => {
@@ -885,15 +956,94 @@ $('about').addEventListener('click', () => {
     'Turban Shop — каталог товаров. Данные загружаются из Supabase.';
 });
 
+// Добавляем корзину в интерфейс без изменения index.html.
+
+const cartSection = document.createElement('section');
+cartSection.className = 'page';
+cartSection.id = 'cart';
+
+cartSection.innerHTML = `
+  <div class="page-heading">
+    <h1>Корзина</h1>
+    <span class="muted">🛒</span>
+  </div>
+
+  <div id="cartItems"></div>
+
+  <div id="cartSummary" hidden>
+    <div class="section-title">
+      <h2>Итого</h2>
+      <strong id="cartTotal">0 ₽</strong>
+    </div>
+    <p class="muted" id="cartCountText"></p>
+    <p class="muted">
+      Корзина сохраняется на этом устройстве.
+      Оформление заказа подключим позже.
+    </p>
+  </div>
+`;
+
+document.querySelector('main').appendChild(cartSection);
+
+const nav = document.querySelector('.nav');
+const cartButton = document.createElement('button');
+
+cartButton.type = 'button';
+cartButton.dataset.page = 'cart';
+cartButton.innerHTML = `
+  <span>🛒</span>
+  Корзина
+  <small class="cart-count" hidden>0</small>
+`;
+
+nav.appendChild(cartButton);
+
+const cartStyle = document.createElement('style');
+cartStyle.textContent = `
+  .nav {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .nav button {
+    min-width: 0;
+    font-size: 10px;
+  }
+
+  .cart-count {
+    display: inline-block;
+    font-size: 9px;
+    color: #d7a6ff;
+    margin-left: 2px;
+  }
+
+  .cart-count[hidden] {
+    display: none;
+  }
+
+  #cartSummary {
+    padding-bottom: 20px;
+  }
+
+  #cartSummary[hidden] {
+    display: none;
+  }
+
+  #cartItems .secondary {
+    min-height: 36px;
+    padding: 7px 12px;
+  }
+`;
+document.head.appendChild(cartStyle);
+
 const user = tg?.initDataUnsafe?.user;
 
 if (user) {
   $('profileName').textContent =
-    user.first_name ||
-    user.username ||
-    'Пользователь';
+    user.first_name || user.username || 'Пользователь';
 }
 
 updateAdminUI();
 loadProducts();
 checkAdmin();
+updateCartBadge();
