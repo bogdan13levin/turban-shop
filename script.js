@@ -1,8 +1,7 @@
 
 'use strict';
 
-// TURBAN SHOP 3.0
-// Общий каталог Supabase + локальное избранное
+// TURBAN SHOP 4.0 — SUPABASE AUTH
 
 const SUPABASE_URL =
   'https://tlrkdikpmcbfbcazwnae.supabase.co';
@@ -18,6 +17,11 @@ if (tg) {
 }
 
 const $ = id => document.getElementById(id);
+
+const db = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY
+);
 
 const FAV_KEY = 'turban-demo-favorites-v2';
 
@@ -37,12 +41,13 @@ function readFavorites() {
 
 let products = [];
 let favorites = readFavorites();
-
 let filter = 'all';
 let currentPage = 'home';
 let previousPage = 'catalog';
+let currentDetailId = null;
 let loading = true;
 let loadError = '';
+let isAdmin = false;
 
 const money = value =>
   Number(value).toLocaleString('ru-RU') + ' ₽';
@@ -90,10 +95,7 @@ function empty(title, description) {
 }
 
 function showPage(page) {
-  if (
-    page === 'detail' &&
-    currentPage !== 'detail'
-  ) {
+  if (page === 'detail' && currentPage !== 'detail') {
     previousPage = currentPage;
   }
 
@@ -113,9 +115,7 @@ function showPage(page) {
     );
   });
 
-  if (page === 'favorites') {
-    renderFavorites();
-  }
+  if (page === 'favorites') renderFavorites();
 
   window.scrollTo(0, 0);
 }
@@ -126,18 +126,15 @@ function productCard(p) {
 
   return `
     <article class="product">
-
       <div
         class="product-photo"
         data-open="${escapeHTML(p.id)}"
       >
         ${
           photo
-            ? `<img
-                src="${escapeHTML(photo)}"
-                alt="${escapeHTML(p.name)}"
-                loading="lazy"
-              >`
+            ? `<img src="${escapeHTML(photo)}"
+                 alt="${escapeHTML(p.name)}"
+                 loading="lazy">`
             : '<span>ФОТО</span>'
         }
 
@@ -166,22 +163,15 @@ function productCard(p) {
           ${money(p.price)}
         </div>
       </div>
-
     </article>
   `;
 }
 
 function render() {
   const status = loading
-    ? empty(
-        'Загружаем каталог',
-        'Подожди немного…'
-      )
+    ? empty('Загружаем каталог', 'Подожди немного…')
     : loadError
-      ? empty(
-          'Не удалось загрузить товары',
-          loadError
-        )
+      ? empty('Не удалось загрузить товары', loadError)
       : '';
 
   const newProducts = products
@@ -195,34 +185,24 @@ function render() {
   $('homeNew').innerHTML =
     status ||
     newProducts.map(productCard).join('') ||
-    empty(
-      'Новинок пока нет',
-      'Они появятся после публикации.'
-    );
+    empty('Новинок пока нет', 'Они появятся после публикации.');
 
   $('homePopular').innerHTML =
     status ||
     popularProducts.map(productCard).join('') ||
-    empty(
-      'Пока пусто',
-      'Популярные товары появятся здесь.'
-    );
+    empty('Пока пусто', 'Популярные товары появятся здесь.');
 
   const query = $('search').value
     .trim()
     .toLocaleLowerCase('ru');
 
   const visible = products.filter(p => {
-    const matchesCategory =
-      filter === 'all' ||
-      p.category === filter;
-
-    const matchesSearch =
+    return (
+      (filter === 'all' || p.category === filter) &&
       `${p.name} ${p.description}`
         .toLocaleLowerCase('ru')
-        .includes(query);
-
-    return matchesCategory && matchesSearch;
+        .includes(query)
+    );
   });
 
   $('catalogCount').textContent = loading
@@ -257,13 +237,9 @@ function renderFavorites() {
 function toggleFavorite(id) {
   id = String(id);
 
-  if (favorites.includes(id)) {
-    favorites = favorites.filter(
-      item => item !== id
-    );
-  } else {
-    favorites.push(id);
-  }
+  favorites = favorites.includes(id)
+    ? favorites.filter(item => item !== id)
+    : [...favorites, id];
 
   try {
     localStorage.setItem(
@@ -271,23 +247,21 @@ function toggleFavorite(id) {
       JSON.stringify(favorites)
     );
   } catch (error) {
-    console.warn(
-      'Не удалось сохранить избранное',
-      error
-    );
+    console.warn(error);
   }
 
   render();
 
-  if (currentPage === 'detail') {
-    renderDetail(id);
+  if (currentPage === 'detail' && currentDetailId) {
+    renderDetail(currentDetailId);
   }
 }
 
 function renderDetail(id) {
   const p = findProduct(id);
-
   if (!p) return;
+
+  currentDetailId = String(id);
 
   const photo = safePhoto(p.photo);
   const saved = favorites.includes(p.id);
@@ -296,10 +270,8 @@ function renderDetail(id) {
     <div class="detail-photo">
       ${
         photo
-          ? `<img
-              src="${escapeHTML(photo)}"
-              alt="${escapeHTML(p.name)}"
-            >`
+          ? `<img src="${escapeHTML(photo)}"
+                 alt="${escapeHTML(p.name)}">`
           : 'Фото не добавлено'
       }
     </div>
@@ -347,37 +319,20 @@ function openDetail(id) {
 async function loadProducts() {
   loading = true;
   loadError = '';
-
   render();
 
   try {
-    const endpoint =
-      `${SUPABASE_URL}/rest/v1/products` +
-      '?select=id,name,description,price,stock,category,image_url' +
-      '&is_published=eq.true' +
-      '&order=created_at.desc';
+    const { data, error } = await db
+      .from('products')
+      .select(
+        'id,name,description,price,stock,category,image_url'
+      )
+      .eq('is_published', true)
+      .order('created_at', { ascending: false });
 
-    const response = await fetch(endpoint, {
-      method: 'GET',
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`
-      }
-    });
+    if (error) throw error;
 
-    if (!response.ok) {
-      throw new Error(
-        `Ошибка сервера: ${response.status}`
-      );
-    }
-
-    const data = await response.json();
-
-    if (!Array.isArray(data)) {
-      throw new Error('Неверный ответ базы данных');
-    }
-
-    products = data.map(row => ({
+    products = (data || []).map(row => ({
       id: String(row.id),
       name: String(row.name ?? ''),
       description: String(row.description ?? ''),
@@ -388,59 +343,141 @@ async function loadProducts() {
     }));
 
   } catch (error) {
-    console.error('Supabase:', error);
+    console.error('Ошибка каталога:', error);
 
     loadError =
-      'Проверь подключение Supabase, Data API и RLS.';
+      'Проверь подключение Supabase и права доступа.';
   } finally {
     loading = false;
     render();
   }
 }
 
+function updateAdminUI(email = '') {
+  $('adminLogin').hidden = isAdmin;
+  $('adminPanel').hidden = !isAdmin;
+  $('adminUserEmail').textContent = email;
+}
+
+async function checkAdmin() {
+  isAdmin = false;
+
+  try {
+    const { data: userData, error: userError } =
+      await db.auth.getUser();
+
+    if (userError || !userData.user) {
+      updateAdminUI();
+      return;
+    }
+
+    const { data, error } = await db
+      .from('admins')
+      .select('user_id')
+      .eq('user_id', userData.user.id)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    isAdmin = Boolean(data);
+    updateAdminUI(
+      isAdmin ? userData.user.email : ''
+    );
+
+  } catch (error) {
+    console.error('Проверка администратора:', error);
+    updateAdminUI();
+  }
+}
+
+$('loginForm').addEventListener('submit', async event => {
+  event.preventDefault();
+
+  const email = $('adminEmail').value.trim();
+  const password = $('adminPassword').value;
+  const button = $('loginButton');
+
+  button.disabled = true;
+  $('loginStatus').textContent = 'Проверяем данные…';
+
+  try {
+    const { error } = await db.auth.signInWithPassword({
+      email,
+      password
+    });
+
+    if (error) throw error;
+
+    await checkAdmin();
+
+    if (!isAdmin) {
+      await db.auth.signOut();
+      $('loginStatus').textContent =
+        'У этого аккаунта нет прав администратора.';
+      return;
+    }
+
+    $('adminPassword').value = '';
+    $('loginStatus').textContent = '';
+
+  } catch (error) {
+    console.error('Ошибка входа:', error);
+
+    $('loginStatus').textContent =
+      'Не удалось войти. Проверь email и пароль.';
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('logoutButton').addEventListener('click', async () => {
+  await db.auth.signOut();
+
+  isAdmin = false;
+  updateAdminUI();
+
+  $('adminPassword').value = '';
+  $('loginStatus').textContent = '';
+});
+
+$('adminShortcut').addEventListener('click', async () => {
+  showPage('admin');
+  await checkAdmin();
+});
+
 document.addEventListener('click', event => {
-  const favorite = event.target.closest(
-    '[data-fav]'
-  );
+  const favorite = event.target.closest('[data-fav]');
 
   if (favorite) {
     toggleFavorite(favorite.dataset.fav);
     return;
   }
 
-  const product = event.target.closest(
-    '[data-open]'
-  );
+  const product = event.target.closest('[data-open]');
 
   if (product) {
     openDetail(product.dataset.open);
     return;
   }
 
-  const navigation = event.target.closest(
-    '[data-page]'
-  );
+  const navigation = event.target.closest('[data-page]');
 
   if (navigation) {
     showPage(navigation.dataset.page);
     return;
   }
 
-  const category = event.target.closest(
-    '[data-filter]'
-  );
+  const category = event.target.closest('[data-filter]');
 
   if (category) {
     filter = category.dataset.filter;
 
-    document
-      .querySelectorAll('[data-filter]')
-      .forEach(button => {
-        button.classList.toggle(
-          'active',
-          button.dataset.filter === filter
-        );
-      });
+    document.querySelectorAll('[data-filter]').forEach(button => {
+      button.classList.toggle(
+        'active',
+        button.dataset.filter === filter
+      );
+    });
 
     render();
     showPage('catalog');
@@ -459,19 +496,9 @@ $('back').addEventListener('click', () => {
 
 $('about').addEventListener('click', () => {
   $('aboutText').textContent =
-    'Turban Shop — демонстрационный каталог. ' +
+    'Turban Shop — каталог товаров. ' +
     'Данные загружаются из Supabase.';
 });
-
-// Убираем публичный редактор товаров.
-// Управление общей базой — через Supabase Dashboard.
-
-$('adminShortcut').hidden = true;
-$('adminShortcut').style.display = 'none';
-
-$('admin').remove();
-
-// Профиль Telegram
 
 const user = tg?.initDataUnsafe?.user;
 
@@ -482,6 +509,6 @@ if (user) {
     'Пользователь';
 }
 
-// Запускаем загрузку каталога
-
+updateAdminUI();
 loadProducts();
+checkAdmin();
