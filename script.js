@@ -1,14 +1,17 @@
 
 'use strict';
 
-// TURBAN SHOP 4.1
-// Каталог + защищённое управление обычными товарами
+// TURBAN SHOP 4.2
+// Supabase Auth + управление каталогом + Storage
 
 const SUPABASE_URL =
   'https://tlrkdikpmcbfbcazwnae.supabase.co';
 
 const SUPABASE_KEY =
   'sb_publishable_C_unMg0Kd-rF1BrxNj2vnA_i6v7FoOC';
+
+const BUCKET = 'product-images';
+const MAX_PHOTO_SIZE = 5 * 1024 * 1024;
 
 const tg = window.Telegram?.WebApp;
 
@@ -38,6 +41,7 @@ function readFavorites() {
 let products = [];
 let adminProducts = [];
 let favorites = readFavorites();
+
 let filter = 'all';
 let currentPage = 'home';
 let previousPage = 'catalog';
@@ -46,6 +50,7 @@ let loading = true;
 let loadError = '';
 let isAdmin = false;
 let adminBusy = false;
+let previewObjectURL = '';
 
 const money = value =>
   Number(value).toLocaleString('ru-RU') + ' ₽';
@@ -62,6 +67,7 @@ function escapeHTML(value) {
 
 function safePhoto(value) {
   if (typeof value !== 'string' || !value.trim()) return '';
+
   try {
     const url = new URL(value);
     return url.protocol === 'https:' ? url.href : '';
@@ -75,7 +81,12 @@ function findProduct(id) {
 }
 
 function empty(title, description) {
-  return `<div class="empty"><strong>${escapeHTML(title)}</strong>${escapeHTML(description)}</div>`;
+  return `
+    <div class="empty">
+      <strong>${escapeHTML(title)}</strong>
+      ${escapeHTML(description)}
+    </div>
+  `;
 }
 
 function showPage(page) {
@@ -105,19 +116,28 @@ function productCard(p) {
   return `
     <article class="product">
       <div class="product-photo" data-open="${escapeHTML(p.id)}">
-        ${photo
-          ? `<img src="${escapeHTML(photo)}" alt="${escapeHTML(p.name)}" loading="lazy">`
-          : '<span>ФОТО</span>'}
-        <button class="favorite-btn ${saved ? 'saved' : ''}"
+        ${
+          photo
+            ? `<img src="${escapeHTML(photo)}"
+                 alt="${escapeHTML(p.name)}"
+                 loading="lazy">`
+            : '<span>ФОТО</span>'
+        }
+
+        <button
+          class="favorite-btn ${saved ? 'saved' : ''}"
           data-fav="${escapeHTML(p.id)}"
-          aria-label="Избранное">${saved ? '♥' : '♡'}</button>
+          aria-label="Избранное"
+        >${saved ? '♥' : '♡'}</button>
       </div>
+
       <div class="product-info" data-open="${escapeHTML(p.id)}">
         <div class="product-name">${escapeHTML(p.name)}</div>
         <div class="product-description">${escapeHTML(p.description)}</div>
         <div class="product-price">${money(p.price)}</div>
       </div>
-    </article>`;
+    </article>
+  `;
 }
 
 function render() {
@@ -127,22 +147,40 @@ function render() {
       ? empty('Не удалось загрузить товары', loadError)
       : '';
 
-  const newProducts = products.filter(p => p.category === 'new').slice(0, 4);
-  const popularProducts = products.filter(p => p.category === 'popular').slice(0, 4);
+  const newProducts = products
+    .filter(p => p.category === 'new')
+    .slice(0, 4);
+
+  const popularProducts = products
+    .filter(p => p.category === 'popular')
+    .slice(0, 4);
+
+  const saleProducts = products
+    .filter(p => p.category === 'sale')
+    .slice(0, 4);
 
   $('homeNew').innerHTML =
-    status || newProducts.map(productCard).join('') ||
+    status ||
+    newProducts.map(productCard).join('') ||
     empty('Новинок пока нет', 'Они появятся после публикации.');
 
   $('homePopular').innerHTML =
-    status || popularProducts.map(productCard).join('') ||
+    status ||
+    popularProducts.map(productCard).join('') ||
     empty('Пока пусто', 'Популярные товары появятся здесь.');
+
+  $('homeSale').innerHTML =
+    status ||
+    saleProducts.map(productCard).join('') ||
+    empty('Скидок пока нет', 'Товары со скидками появятся здесь.');
 
   const query = $('search').value.trim().toLocaleLowerCase('ru');
 
   const visible = products.filter(p =>
     (filter === 'all' || p.category === filter) &&
-    `${p.name} ${p.description}`.toLocaleLowerCase('ru').includes(query)
+    `${p.name} ${p.description}`
+      .toLocaleLowerCase('ru')
+      .includes(query)
   );
 
   $('catalogCount').textContent = loading
@@ -150,7 +188,8 @@ function render() {
     : `${visible.length} товаров`;
 
   $('catalogItems').innerHTML =
-    status || visible.map(productCard).join('') ||
+    status ||
+    visible.map(productCard).join('') ||
     empty('Каталог пока пуст', 'Опубликованные товары появятся здесь.');
 
   renderFavorites();
@@ -196,17 +235,34 @@ function renderDetail(id) {
 
   $('detailView').innerHTML = `
     <div class="detail-photo">
-      ${photo
-        ? `<img src="${escapeHTML(photo)}" alt="${escapeHTML(p.name)}">`
-        : 'Фото не добавлено'}
+      ${
+        photo
+          ? `<img src="${escapeHTML(photo)}"
+                 alt="${escapeHTML(p.name)}">`
+          : 'Фото не добавлено'
+      }
     </div>
+
     <h1>${escapeHTML(p.name)}</h1>
-    <p class="muted">${escapeHTML(p.description || 'Описание пока не добавлено.')}</p>
+
+    <p class="muted">
+      ${escapeHTML(p.description || 'Описание пока не добавлено.')}
+    </p>
+
     <p class="detail-price">${money(p.price)}</p>
-    <p class="muted">${p.stock > 0 ? `В наличии: ${p.stock} шт.` : 'Нет в наличии'}</p>
+
+    <p class="muted">
+      ${p.stock > 0
+        ? `В наличии: ${p.stock} шт.`
+        : 'Нет в наличии'}
+    </p>
+
     <button class="primary" data-fav="${escapeHTML(p.id)}">
-      ${saved ? '♥ Убрать из избранного' : '♡ Добавить в избранное'}
-    </button>`;
+      ${saved
+        ? '♥ Убрать из избранного'
+        : '♡ Добавить в избранное'}
+    </button>
+  `;
 }
 
 function openDetail(id) {
@@ -236,7 +292,9 @@ async function loadProducts() {
   try {
     const { data, error } = await db
       .from('products')
-      .select('id,name,description,price,stock,category,image_url,is_published')
+      .select(
+        'id,name,description,price,stock,category,image_url,is_published'
+      )
       .eq('is_published', true)
       .order('created_at', { ascending: false });
 
@@ -296,20 +354,25 @@ function setAdminStatus(message) {
 
 function setAdminBusy(busy) {
   adminBusy = busy;
+
   $('saveButton').disabled = busy;
   $('resetForm').disabled = busy;
   $('refreshAdmin').disabled = busy;
+  $('photo').disabled = busy;
 }
 
 async function loadAdminProducts() {
   if (!isAdmin) return;
 
-  $('adminList').innerHTML = empty('Загрузка товаров', 'Подожди немного…');
+  $('adminList').innerHTML =
+    empty('Загрузка товаров', 'Подожди немного…');
 
   try {
     const { data, error } = await db
       .from('products')
-      .select('id,name,description,price,stock,category,image_url,is_published')
+      .select(
+        'id,name,description,price,stock,category,image_url,is_published'
+      )
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -318,8 +381,11 @@ async function loadAdminProducts() {
     renderAdminProducts();
   } catch (error) {
     console.error('Ошибка админ-каталога:', error);
-    $('adminList').innerHTML =
-      empty('Не удалось загрузить товары', 'Проверь RLS и права администратора.');
+
+    $('adminList').innerHTML = empty(
+      'Не удалось загрузить товары',
+      'Проверь RLS и права администратора.'
+    );
   }
 }
 
@@ -327,36 +393,71 @@ function renderAdminProducts() {
   if (!isAdmin) return;
 
   $('adminList').innerHTML = adminProducts.map(p => `
-    <div class="profile" style="margin-bottom:12px;align-items:flex-start;">
-      <div class="avatar" style="overflow:hidden;flex-shrink:0;">
+    <div class="profile"
+      style="margin-bottom:12px;align-items:flex-start;">
+
+      <div class="avatar"
+        style="overflow:hidden;flex-shrink:0;">
         ${p.photo
-          ? `<img src="${escapeHTML(p.photo)}" alt="" style="width:100%;height:100%;object-fit:cover;">`
+          ? `<img src="${escapeHTML(p.photo)}" alt=""
+              style="width:100%;height:100%;object-fit:cover;">`
           : '▦'}
       </div>
+
       <div style="flex:1;min-width:0;">
         <strong>${escapeHTML(p.name)}</strong>
         <p>${money(p.price)} · Остаток: ${p.stock}</p>
-        <p class="muted">${p.isPublished ? '● Опубликован' : '○ Скрыт'}</p>
+        <p class="muted">
+          ${p.isPublished ? '● Опубликован' : '○ Скрыт'}
+        </p>
+
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
           <button type="button" class="secondary"
             data-admin-edit="${escapeHTML(p.id)}">Изменить</button>
+
           <button type="button" class="secondary"
             data-admin-toggle="${escapeHTML(p.id)}">
             ${p.isPublished ? 'Скрыть' : 'Опубликовать'}
           </button>
+
           <button type="button" class="secondary"
             data-admin-delete="${escapeHTML(p.id)}">Удалить</button>
         </div>
       </div>
     </div>
-  `).join('') || empty('Товаров пока нет', 'Добавь первый товар через форму.');
+  `).join('') ||
+  empty('Товаров пока нет', 'Добавь первый товар через форму.');
+}
+
+function clearPreviewURL() {
+  if (previewObjectURL) {
+    URL.revokeObjectURL(previewObjectURL);
+    previewObjectURL = '';
+  }
 }
 
 function previewPhoto() {
+  clearPreviewURL();
+
+  const file = $('photo').files[0];
+
+  if (file) {
+    previewObjectURL = URL.createObjectURL(file);
+
+    $('photoPreview').innerHTML = `
+      <img src="${escapeHTML(previewObjectURL)}"
+        alt="Предпросмотр фотографии"
+        style="max-width:100%;max-height:180px;object-fit:contain;">
+    `;
+    return;
+  }
+
   const photo = safePhoto($('imageUrl').value.trim());
 
   $('photoPreview').innerHTML = photo
-    ? `<img src="${escapeHTML(photo)}" alt="Предпросмотр" style="max-width:100%;max-height:180px;object-fit:contain;">`
+    ? `<img src="${escapeHTML(photo)}"
+        alt="Предпросмотр"
+        style="max-width:100%;max-height:180px;object-fit:contain;">`
     : 'Фото пока нет';
 }
 
@@ -364,7 +465,10 @@ function resetProductForm() {
   $('productForm').reset();
   $('editId').value = '';
   $('saveButton').textContent = 'Добавить товар';
+
+  clearPreviewURL();
   $('photoPreview').textContent = 'Фото пока нет';
+
   setAdminStatus('');
 }
 
@@ -379,9 +483,11 @@ function editProduct(id) {
   $('stock').value = p.stock;
   $('category').value = p.category;
   $('imageUrl').value = p.photo;
+  $('photo').value = '';
   $('isPublished').checked = p.isPublished;
 
   $('saveButton').textContent = 'Сохранить изменения';
+
   setAdminStatus('Редактирование: ' + p.name);
   previewPhoto();
 
@@ -404,11 +510,19 @@ function getProductPayload() {
     throw new Error('Введи название товара до 100 символов.');
   }
 
-  if (!Number.isFinite(price) || price < 0) {
+  if (
+    $('price').value.trim() === '' ||
+    !Number.isFinite(price) ||
+    price < 0
+  ) {
     throw new Error('Укажи корректную цену.');
   }
 
-  if (!Number.isSafeInteger(stock) || stock < 0) {
+  if (
+    $('stock').value.trim() === '' ||
+    !Number.isSafeInteger(stock) ||
+    stock < 0
+  ) {
     throw new Error('Остаток должен быть целым неотрицательным числом.');
   }
 
@@ -417,7 +531,7 @@ function getProductPayload() {
   }
 
   if (rawPhoto && !imageUrl) {
-    throw new Error('Фотография должна иметь корректную HTTPS-ссылку.');
+    throw new Error('Укажи корректную HTTPS-ссылку.');
   }
 
   return {
@@ -431,16 +545,96 @@ function getProductPayload() {
   };
 }
 
+async function uploadProductPhoto(file) {
+  if (!file) return null;
+
+  const allowedTypes = [
+    'image/jpeg',
+    'image/png',
+    'image/webp'
+  ];
+
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error('Поддерживаются только JPG, PNG и WebP.');
+  }
+
+  if (file.size > MAX_PHOTO_SIZE) {
+    throw new Error('Фотография должна быть не больше 5 МБ.');
+  }
+
+  if (file.size === 0) {
+    throw new Error('Выбран пустой файл.');
+  }
+
+  const extension = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp'
+  }[file.type];
+
+  const uniqueId = crypto.randomUUID();
+  const path = `catalog/${uniqueId}.${extension}`;
+
+  const { error } = await db.storage
+    .from(BUCKET)
+    .upload(path, file, {
+      contentType: file.type,
+      cacheControl: '3600',
+      upsert: false
+    });
+
+  if (error) throw error;
+
+  const { data } = db.storage
+    .from(BUCKET)
+    .getPublicUrl(path);
+
+  if (!data?.publicUrl) {
+    throw new Error('Не удалось получить ссылку на фотографию.');
+  }
+
+  return {
+    url: data.publicUrl,
+    path
+  };
+}
+
+async function removeUploadedPhoto(path) {
+  if (!path) return;
+
+  const { error } = await db.storage
+    .from(BUCKET)
+    .remove([path]);
+
+  if (error) {
+    console.warn('Не удалось очистить фотографию:', error);
+  }
+}
+
 $('productForm').addEventListener('submit', async event => {
   event.preventDefault();
+
   if (!isAdmin || adminBusy) return;
 
   setAdminBusy(true);
-  setAdminStatus('Сохраняем товар…');
+  setAdminStatus('Проверяем товар…');
+
+  let newUpload = null;
+  let saved = false;
 
   try {
     const payload = getProductPayload();
     const id = $('editId').value;
+    const file = $('photo').files[0];
+
+    if (file) {
+      setAdminStatus('Загружаем фотографию…');
+
+      newUpload = await uploadProductPhoto(file);
+      payload.image_url = newUpload.url;
+    }
+
+    setAdminStatus('Сохраняем товар…');
 
     const query = id
       ? db.from('products').update(payload).eq('id', id)
@@ -450,16 +644,25 @@ $('productForm').addEventListener('submit', async event => {
 
     if (error) throw error;
 
+    saved = true;
     resetProductForm();
-    setAdminStatus('Товар успешно сохранён.');
 
     await Promise.all([
       loadAdminProducts(),
       loadProducts()
     ]);
+
+    setAdminStatus('Товар успешно сохранён.');
   } catch (error) {
     console.error('Ошибка сохранения:', error);
-    setAdminStatus('Ошибка: ' + (error.message || 'Не удалось сохранить товар.'));
+
+    if (newUpload && !saved) {
+      await removeUploadedPhoto(newUpload.path);
+    }
+
+    setAdminStatus(
+      'Ошибка: ' + (error.message || 'Не удалось сохранить товар.')
+    );
   } finally {
     setAdminBusy(false);
   }
@@ -482,7 +685,11 @@ async function togglePublished(id) {
 
     if (error) throw error;
 
-    await Promise.all([loadAdminProducts(), loadProducts()]);
+    await Promise.all([
+      loadAdminProducts(),
+      loadProducts()
+    ]);
+
     setAdminStatus('Статус публикации обновлён.');
   } catch (error) {
     console.error(error);
@@ -513,7 +720,15 @@ async function deleteProduct(id) {
 
     if ($('editId').value === p.id) resetProductForm();
 
-    await Promise.all([loadAdminProducts(), loadProducts()]);
+    await Promise.all([
+      loadAdminProducts(),
+      loadProducts()
+    ]);
+
+    // Файлы в Storage пока не удаляем автоматически:
+    // это исключает случайную потерю изображений,
+    // если они используются другими товарами.
+
     setAdminStatus('Товар удалён.');
   } catch (error) {
     console.error(error);
@@ -554,6 +769,7 @@ $('loginForm').addEventListener('submit', async event => {
     $('loginStatus').textContent = '';
   } catch (error) {
     console.error('Ошибка входа:', error);
+
     $('loginStatus').textContent =
       'Не удалось войти. Проверь email и пароль.';
   } finally {
@@ -566,8 +782,10 @@ $('logoutButton').addEventListener('click', async () => {
 
   isAdmin = false;
   adminProducts = [];
+
   updateAdminUI();
   resetProductForm();
+
   $('adminList').innerHTML = '';
   $('adminPassword').value = '';
   $('loginStatus').textContent = '';
@@ -581,6 +799,7 @@ $('adminShortcut').addEventListener('click', async () => {
 });
 
 $('resetForm').addEventListener('click', resetProductForm);
+$('photo').addEventListener('change', previewPhoto);
 $('imageUrl').addEventListener('input', previewPhoto);
 
 $('refreshAdmin').addEventListener('click', async () => {
@@ -620,6 +839,17 @@ document.addEventListener('click', event => {
 
   const navigation = event.target.closest('[data-page]');
   if (navigation) {
+    if (navigation.dataset.goFilter) {
+      filter = navigation.dataset.goFilter;
+      document.querySelectorAll('[data-filter]').forEach(button => {
+        button.classList.toggle(
+          'active',
+          button.dataset.filter === filter
+        );
+      });
+      render();
+    }
+
     showPage(navigation.dataset.page);
     return;
   }
@@ -643,7 +873,11 @@ document.addEventListener('click', event => {
 $('search').addEventListener('input', render);
 
 $('back').addEventListener('click', () => {
-  showPage(previousPage === 'detail' ? 'catalog' : previousPage);
+  showPage(
+    previousPage === 'detail'
+      ? 'catalog'
+      : previousPage
+  );
 });
 
 $('about').addEventListener('click', () => {
@@ -655,7 +889,9 @@ const user = tg?.initDataUnsafe?.user;
 
 if (user) {
   $('profileName').textContent =
-    user.first_name || user.username || 'Пользователь';
+    user.first_name ||
+    user.username ||
+    'Пользователь';
 }
 
 updateAdminUI();
