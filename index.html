@@ -1,0 +1,182 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a090f">
+  <title>Turban Shop — Demo</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="script.js" defer></script>
+</head>
+<body>
+<div class="app">
+
+  <header class="header">
+    <button class="logo" data-page="home" aria-label="Главная">
+      TURBAN<span>SHOP</span>
+      <small>DEMO SPACE</small>
+    </button>
+    <button class="headbtn" id="adminShortcut" aria-label="Админ-панель">⚙</button>
+  </header>
+
+  <main>
+    <section class="page active" id="home">
+      <div class="hero">
+        <div class="orb"></div>
+        <div class="overline">TURBAN / DIGITAL SPACE</div>
+        <div class="hero-title">NEW<br><i>COLLECTION</i></div>
+        <p>Тёмная эстетика. Твой стиль.</p>
+        <button class="hero-arrow" data-page="catalog" aria-label="Открыть каталог">↗</button>
+      </div>
+
+      <div class="categories">
+        <button class="active" data-filter="all"><span>✧</span>Все</button>
+        <button data-filter="new"><span>✦</span>Новинки</button>
+        <button data-filter="popular"><span>★</span>Популярное</button>
+        <button data-filter="sale"><span>%</span>Скидки</button>
+      </div>
+
+      <div class="section-title">
+        <h2>Новинки</h2>
+        <button data-page="catalog">Смотреть все ↗</button>
+      </div>
+      <div class="products" id="homeNew"></div>
+
+      <div class="section-title">
+        <h2>Популярное</h2>
+        <button data-page="catalog">Смотреть все ↗</button>
+      </div>
+      <div class="products" id="homePopular"></div>
+    </section>
+
+    <section class="page" id="catalog">
+      <div class="page-heading">
+        <h1>Каталог</h1>
+        <span class="muted" id="catalogCount">0 товаров</span>
+      </div>
+
+      <label class="searchbox">
+        <span>⌕</span>
+        <input id="search" type="search" placeholder="Поиск по названию..." autocomplete="off">
+      </label>
+
+      <div class="filters">
+        <button class="active" data-filter="all">Все</button>
+        <button data-filter="new">Новинки</button>
+        <button data-filter="popular">Популярное</button>
+        <button data-filter="sale">Скидки</button>
+      </div>
+
+      <div class="products" id="catalogItems"></div>
+    </section>
+
+    <section class="page" id="favorites">
+      <div class="page-heading">
+        <h1>Избранное</h1>
+        <span class="muted">♡</span>
+      </div>
+      <div class="products" id="favoriteItems"></div>
+    </section>
+
+    <section class="page" id="profile">
+      <h1>Профиль</h1>
+      <div class="profile">
+        <div class="avatar">T</div>
+        <div>
+          <strong id="profileName">Гость</strong>
+          <p>Добро пожаловать в Turban Shop</p>
+        </div>
+      </div>
+      <button class="menu-row" data-page="favorites">
+        Избранное <span>›</span>
+      </button>
+      <button class="menu-row" id="about">
+        О магазине <span>›</span>
+      </button>
+      <p class="muted" id="aboutText"></p>
+    </section>
+
+    <section class="page" id="detail">
+      <button class="back" id="back">← Назад</button>
+      <div id="detailView"></div>
+    </section>
+
+    <section class="page" id="admin">
+      <h1>Админ-панель</h1>
+      <p class="muted">
+        Локальная демонстрация. Данные доступны только
+        в этом браузере. Это не защищённая админ-панель.
+      </p>
+
+      <form class="form" id="productForm">
+        <input type="hidden" id="editId">
+
+        <label>
+          Название
+          <input id="name" placeholder="Название товара" required maxlength="100">
+        </label>
+
+        <label>
+          Описание
+          <textarea id="description" placeholder="Описание товара" maxlength="1000"></textarea>
+        </label>
+
+        <div class="twocol">
+          <label>
+            Цена, ₽
+            <input id="price" type="number" min="0" step="1" required>
+          </label>
+          <label>
+            Остаток
+            <input id="stock" type="number" min="0" step="1" required>
+          </label>
+        </div>
+
+        <label>
+          Категория
+          <select id="category">
+            <option value="new">Новинки</option>
+            <option value="popular">Популярное</option>
+            <option value="sale">Скидки</option>
+          </select>
+        </label>
+
+        <label>
+          Фото (JPG/PNG/WebP до 1 МБ)
+          <input id="photo" type="file" accept="image/jpeg,image/png,image/webp">
+        </label>
+
+        <div class="photo-preview" id="photoPreview">Фото пока нет</div>
+
+        <button class="primary" type="submit" id="saveButton">Добавить товар</button>
+        <button class="secondary" type="button" id="resetForm">Очистить форму</button>
+        <p class="muted" id="adminStatus" aria-live="polite"></p>
+      </form>
+
+      <div class="section-title">
+        <h2>Добавленные товары</h2>
+      </div>
+      <div id="adminList"></div>
+    </section>
+  </main>
+
+  <nav class="nav" aria-label="Навигация">
+    <button class="active" data-page="home">
+      <span>⌂</span>Главная
+    </button>
+    <button data-page="catalog">
+      <span>▦</span>Каталог
+    </button>
+    <button data-page="favorites">
+      <span>♡</span>Избранное
+    </button>
+    <button data-page="profile">
+      <span>♙</span>Профиль
+    </button>
+  </nav>
+
+</div>
+</body>
+</html>
