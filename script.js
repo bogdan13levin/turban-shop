@@ -2221,3 +2221,295 @@ checkAdmin();
 updateCartBadge();
 
 console.log('Turban Shop 4.4 FIXED запущен');
+
+/* ==========================================
+   TURBAN SHOP 4.6 — АРХИВ ЗАКАЗОВ
+   ========================================== */
+
+let orderArchiveTab = 'active';
+let orderArchiveBusy = false;
+
+// Добавляем вкладки в админку
+function setupOrderArchive() {
+  if (document.getElementById('orderArchiveTabs')) return;
+
+  const list = document.getElementById('ordersList');
+  if (!list) return;
+
+  const tabs = document.createElement('div');
+  tabs.id = 'orderArchiveTabs';
+
+  tabs.style.cssText = `
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 16px 0;
+  `;
+
+  tabs.innerHTML = `
+    <button
+      type="button"
+      class="secondary"
+      data-archive-tab="active"
+    >
+      📦 Активные
+    </button>
+
+    <button
+      type="button"
+      class="secondary"
+      data-archive-tab="archive"
+    >
+      🗂 Архив
+    </button>
+  `;
+
+  list.parentNode.insertBefore(tabs, list);
+}
+
+// Обновляем оформление вкладок
+function updateArchiveTabs() {
+  document.querySelectorAll('[data-archive-tab]')
+    .forEach(button => {
+      const active =
+        button.dataset.archiveTab === orderArchiveTab;
+
+      button.style.border = active
+        ? '2px solid #a855f7'
+        : '1px solid #40354c';
+
+      button.style.fontWeight = active
+        ? '700'
+        : '400';
+    });
+}
+
+// Сохраняем оригинальный рендер заказов
+const renderOrdersOriginal46 = renderOrders;
+
+// Добавляем фильтрацию и кнопки
+renderOrders = function () {
+  setupOrderArchive();
+  updateArchiveTabs();
+
+  const allOrders = orders;
+
+  const visibleOrders = allOrders.filter(order =>
+    orderArchiveTab === 'archive'
+      ? order.is_archived === true
+      : order.is_archived !== true
+  );
+
+  orders = visibleOrders;
+
+  try {
+    renderOrdersOriginal46();
+
+    const cards = document.querySelectorAll(
+      '#ordersList > .profile'
+    );
+
+    cards.forEach((card, index) => {
+      const order = visibleOrders[index];
+      if (!order) return;
+
+      const button = document.createElement('button');
+
+      button.type = 'button';
+      button.className = 'secondary';
+      button.dataset.archiveOrder = String(order.id);
+      button.dataset.archiveAction =
+        orderArchiveTab === 'archive'
+          ? 'restore'
+          : 'archive';
+
+      button.textContent =
+        orderArchiveTab === 'archive'
+          ? '↩ Восстановить заказ'
+          : '🗂 Перенести в архив';
+
+      button.style.cssText = `
+        width: 100%;
+        margin-top: 14px;
+        padding: 12px;
+      `;
+
+      button.disabled = orderArchiveBusy;
+      card.appendChild(button);
+    });
+
+    if (document.getElementById('ordersCount')) {
+      document.getElementById('ordersCount').textContent =
+        orderArchiveTab === 'archive'
+          ? `В архиве: ${visibleOrders.length}`
+          : `Активных заказов: ${visibleOrders.length}`;
+    }
+
+    if (!visibleOrders.length) {
+      document.getElementById('ordersList').innerHTML =
+        orderArchiveTab === 'archive'
+          ? empty('Архив пуст', 'Здесь будут архивные заказы.')
+          : empty('Активных заказов пока нет');
+    }
+  } finally {
+    orders = allOrders;
+  }
+};
+
+// Загружаем заказы с полем is_archived
+loadOrders = async function () {
+  if (!isAdmin) return;
+
+  const list = document.getElementById('ordersList');
+  if (!list) return;
+
+  list.innerHTML = empty('Загружаем заказы…');
+
+  try {
+    const ordersResult = await db
+      .from('orders')
+      .select(`
+        id,
+        created_at,
+        customer_name,
+        customer_phone,
+        customer_comment,
+        total,
+        status,
+        is_archived
+      `)
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (ordersResult.error) throw ordersResult.error;
+
+    const loadedOrders = ordersResult.data || [];
+
+    let loadedItems = [];
+
+    if (loadedOrders.length) {
+      const itemsResult = await db
+        .from('order_items')
+        .select(`
+          order_id,
+          product_name,
+          quantity,
+          unit_price,
+          subtotal
+        `)
+        .in(
+          'order_id',
+          loadedOrders.map(order => order.id)
+        )
+        .order('id', { ascending: false })
+        .limit(2000);
+
+      if (itemsResult.error) throw itemsResult.error;
+
+      loadedItems = itemsResult.data || [];
+    }
+
+    orders = loadedOrders;
+    orderItems = loadedItems;
+
+    renderOrders();
+  } catch (error) {
+    console.error('Ошибка загрузки заказов:', error);
+
+    list.innerHTML = empty(
+      'Не удалось загрузить заказы',
+      error.message || 'Проверь подключение Supabase.'
+    );
+  }
+};
+
+// Архивирование и восстановление
+async function changeOrderArchive(id, archive) {
+  if (!isAdmin || adminBusy || orderArchiveBusy) return;
+
+  const order = orders.find(
+    item => String(item.id) === String(id)
+  );
+
+  if (!order) return;
+
+  const action = archive
+    ? 'Перенести в архив'
+    : 'Восстановить';
+
+  const confirmed = confirm(
+    `${action} заказ №${id}?`
+  );
+
+  if (!confirmed) return;
+
+  orderArchiveBusy = true;
+  setAdminBusy(true);
+
+  const status = document.getElementById('ordersStatus');
+
+  if (status) {
+    status.textContent = archive
+      ? 'Архивируем заказ…'
+      : 'Восстанавливаем заказ…';
+  }
+
+  try {
+    const { error } = await db.rpc(
+      'set_order_archived',
+      {
+        p_order_id: Number(id),
+        p_archived: archive
+      }
+    );
+
+    if (error) throw error;
+
+    await loadOrders();
+
+    if (status) {
+      status.textContent = archive
+        ? `Заказ №${id} перемещён в архив.`
+        : `Заказ №${id} восстановлен.`;
+    }
+  } catch (error) {
+    console.error('Ошибка архива:', error);
+
+    if (status) {
+      status.textContent =
+        'Ошибка: ' +
+        (error.message || 'Не удалось обновить заказ.');
+    }
+
+    renderOrders();
+  } finally {
+    orderArchiveBusy = false;
+    setAdminBusy(false);
+  }
+}
+
+// Переключение вкладок и кнопки заказов
+document.addEventListener('click', event => {
+  const tab = event.target.closest('[data-archive-tab]');
+
+  if (tab) {
+    orderArchiveTab = tab.dataset.archiveTab;
+    renderOrders();
+    return;
+  }
+
+  const button = event.target.closest(
+    '[data-archive-order]'
+  );
+
+  if (button) {
+    changeOrderArchive(
+      button.dataset.archiveOrder,
+      button.dataset.archiveAction === 'archive'
+    );
+  }
+});
+
+setupOrderArchive();
+
+console.log('Turban Shop 4.6 — архив заказов подключён');
