@@ -30,22 +30,31 @@
         <p>Тёмная эстетика. Твой стиль.</p>
         <button class="hero-arrow" data-page="catalog" aria-label="Каталог">↗</button>
       </div>
+
       <div class="categories">
         <button class="active" data-filter="all"><span>✧</span>Все</button>
         <button data-filter="new"><span>✦</span>Новинки</button>
         <button data-filter="popular"><span>★</span>Популярное</button>
         <button data-filter="sale"><span>%</span>Скидки</button>
       </div>
+
       <div class="section-title">
         <h2>Новинки</h2>
         <button data-page="catalog">Смотреть все ↗</button>
       </div>
       <div class="products" id="homeNew"></div>
+
       <div class="section-title">
         <h2>Популярное</h2>
         <button data-page="catalog">Смотреть все ↗</button>
       </div>
       <div class="products" id="homePopular"></div>
+
+      <div class="section-title">
+        <h2>Скидки</h2>
+        <button data-page="catalog" data-go-filter="sale">Смотреть все ↗</button>
+      </div>
+      <div class="products" id="homeSale"></div>
     </section>
 
     <section class="page" id="catalog">
@@ -167,7 +176,12 @@
           </label>
 
           <label>
-            Ссылка на фотографию (HTTPS)
+            Фотография из галереи (JPG, PNG, WebP до 5 МБ)
+            <input id="photo" type="file" accept="image/jpeg,image/png,image/webp">
+          </label>
+
+          <label>
+            Или HTTPS-ссылка на фотографию
             <input id="imageUrl" type="url" placeholder="https://example.com/photo.jpg">
           </label>
 
