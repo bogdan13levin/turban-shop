@@ -13,7 +13,6 @@
 </head>
 <body>
 <div class="app">
-
   <header class="header">
     <button class="logo" data-page="home" aria-label="Главная">
       TURBAN<span>SHOP</span>
@@ -31,20 +30,17 @@
         <p>Тёмная эстетика. Твой стиль.</p>
         <button class="hero-arrow" data-page="catalog" aria-label="Каталог">↗</button>
       </div>
-
       <div class="categories">
         <button class="active" data-filter="all"><span>✧</span>Все</button>
         <button data-filter="new"><span>✦</span>Новинки</button>
         <button data-filter="popular"><span>★</span>Популярное</button>
         <button data-filter="sale"><span>%</span>Скидки</button>
       </div>
-
       <div class="section-title">
         <h2>Новинки</h2>
         <button data-page="catalog">Смотреть все ↗</button>
       </div>
       <div class="products" id="homeNew"></div>
-
       <div class="section-title">
         <h2>Популярное</h2>
         <button data-page="catalog">Смотреть все ↗</button>
@@ -106,21 +102,16 @@
 
       <div id="adminLogin">
         <p class="muted">Вход только для администратора.</p>
-
         <form class="form" id="loginForm">
           <label>
             Email
             <input id="adminEmail" type="email" autocomplete="username" required placeholder="Email администратора">
           </label>
-
           <label>
             Пароль
             <input id="adminPassword" type="password" autocomplete="current-password" required placeholder="Пароль">
           </label>
-
-          <button class="primary" id="loginButton" type="submit">
-            Войти
-          </button>
+          <button class="primary" id="loginButton" type="submit">Войти</button>
           <p class="muted" id="loginStatus" aria-live="polite"></p>
         </form>
       </div>
@@ -134,32 +125,85 @@
           </div>
         </div>
 
-        <p class="muted">
-          Авторизация успешна. Управление товарами подключим следующим этапом.
-        </p>
-
         <button class="secondary" id="logoutButton" type="button">
           Выйти из аккаунта
         </button>
+
+        <div class="section-title">
+          <h2>Редактор товара</h2>
+        </div>
+
+        <form class="form" id="productForm">
+          <input type="hidden" id="editId">
+
+          <label>
+            Название
+            <input id="name" placeholder="Название товара" maxlength="100" required>
+          </label>
+
+          <label>
+            Описание
+            <textarea id="description" placeholder="Описание товара" maxlength="1000"></textarea>
+          </label>
+
+          <div class="twocol">
+            <label>
+              Цена, ₽
+              <input id="price" type="number" min="0" step="0.01" required>
+            </label>
+            <label>
+              Остаток
+              <input id="stock" type="number" min="0" step="1" required>
+            </label>
+          </div>
+
+          <label>
+            Категория
+            <select id="category">
+              <option value="new">Новинки</option>
+              <option value="popular">Популярное</option>
+              <option value="sale">Скидки</option>
+            </select>
+          </label>
+
+          <label>
+            Ссылка на фотографию (HTTPS)
+            <input id="imageUrl" type="url" placeholder="https://example.com/photo.jpg">
+          </label>
+
+          <div class="photo-preview" id="photoPreview">Фото пока нет</div>
+
+          <label>
+            <input id="isPublished" type="checkbox">
+            Опубликовать в каталоге
+          </label>
+
+          <button class="primary" type="submit" id="saveButton">
+            Добавить товар
+          </button>
+          <button class="secondary" type="button" id="resetForm">
+            Очистить форму
+          </button>
+
+          <p class="muted" id="adminStatus" aria-live="polite"></p>
+        </form>
+
+        <div class="section-title">
+          <h2>Все товары</h2>
+          <button id="refreshAdmin" type="button">Обновить ↻</button>
+        </div>
+
+        <div id="adminList"></div>
       </div>
     </section>
   </main>
 
   <nav class="nav" aria-label="Навигация">
-    <button class="active" data-page="home">
-      <span>⌂</span>Главная
-    </button>
-    <button data-page="catalog">
-      <span>▦</span>Каталог
-    </button>
-    <button data-page="favorites">
-      <span>♡</span>Избранное
-    </button>
-    <button data-page="profile">
-      <span>♙</span>Профиль
-    </button>
+    <button class="active" data-page="home"><span>⌂</span>Главная</button>
+    <button data-page="catalog"><span>▦</span>Каталог</button>
+    <button data-page="favorites"><span>♡</span>Избранное</button>
+    <button data-page="profile"><span>♙</span>Профиль</button>
   </nav>
-
 </div>
 </body>
 </html>
