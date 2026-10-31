@@ -662,3 +662,409 @@ h2 {
     font-size: 10px;
   }
 }
+
+/* ==========================================
+   TURBAN SHOP 4.8 — UI UPDATE
+   ========================================== */
+
+:root {
+  --bg: #0a090f;
+  --surface: #191720;
+  --surface2: #24202c;
+  --purple: #a963f7;
+  --text: #f5f1fb;
+  --muted: #a7a0b2;
+  --border: #352a40;
+}
+
+body {
+  background:
+    radial-gradient(
+      ellipse at top,
+      rgba(116, 51, 163, 0.09),
+      transparent 420px
+    ),
+    var(--bg);
+}
+
+/* Основной контейнер */
+
+.app {
+  max-width: 540px;
+  min-height: 100dvh;
+  padding-bottom: calc(
+    104px + env(safe-area-inset-bottom)
+  );
+}
+
+/* Шапка */
+
+.header {
+  padding: 22px 18px 20px;
+}
+
+.logo {
+  letter-spacing: -1.2px;
+  transition: opacity 0.2s ease;
+}
+
+.logo:active {
+  opacity: 0.7;
+}
+
+.headbtn {
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.headbtn:active {
+  transform: scale(0.94);
+}
+
+/* Переключение страниц */
+
+.page.active {
+  animation: pageEnter48 0.24s ease-out both;
+}
+
+@keyframes pageEnter48 {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Главный баннер */
+
+.hero {
+  border-radius: 22px;
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.hero-arrow {
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease;
+}
+
+.hero-arrow:active {
+  transform: scale(0.92);
+}
+
+/* Категории */
+
+.categories button {
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.categories button:active {
+  transform: scale(0.96);
+}
+
+/* Карточки товаров */
+
+.products {
+  gap: 13px;
+}
+
+.product {
+  border-radius: 19px;
+  border-color: rgba(169, 99, 247, 0.14);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.13);
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.product:active {
+  transform: scale(0.985);
+}
+
+.product-photo {
+  background:
+    radial-gradient(
+      circle at center,
+      #30233c,
+      #1c1724 80%
+    );
+}
+
+.product-photo img {
+  transition: transform 0.3s ease;
+}
+
+.product-info {
+  padding: 13px;
+}
+
+.product-name {
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 750;
+}
+
+.product-description {
+  line-height: 1.5;
+}
+
+.product-price {
+  font-size: 18px;
+  letter-spacing: -0.3px;
+}
+
+/* Избранное */
+
+.favorite-btn {
+  width: 37px;
+  height: 37px;
+  background: rgba(10, 8, 15, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease;
+}
+
+.favorite-btn:active {
+  transform: scale(0.87);
+}
+
+.favorite-btn.saved {
+  color: #d29cff;
+  background: rgba(67, 30, 91, 0.92);
+}
+
+/* Поиск */
+
+.searchbox {
+  border-radius: 15px;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.searchbox:focus-within {
+  border-color: var(--purple);
+  box-shadow: 0 0 0 3px rgba(169, 99, 247, 0.1);
+}
+
+/* Фильтры */
+
+.filters {
+  scroll-snap-type: x proximity;
+}
+
+.filters button {
+  scroll-snap-align: start;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+
+/* Пустые экраны */
+
+.empty {
+  border-radius: 19px;
+  padding: 34px 20px;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(169, 99, 247, 0.055),
+      transparent
+    ),
+    #15121b;
+}
+
+/* Кнопки */
+
+.primary,
+.secondary {
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease,
+    filter 0.18s ease;
+}
+
+.primary:active,
+.secondary:active {
+  transform: scale(0.985);
+}
+
+.primary:disabled,
+.secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Карточка отдельного товара */
+
+.detail-photo {
+  border-radius: 22px;
+  border: 1px solid rgba(169, 99, 247, 0.12);
+}
+
+.detail-price {
+  letter-spacing: -0.6px;
+}
+
+/* Профиль, корзина, заказы */
+
+.profile {
+  border: 1px solid rgba(169, 99, 247, 0.1);
+  border-radius: 18px;
+}
+
+.menu-row {
+  border: 1px solid rgba(169, 99, 247, 0.08);
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.menu-row:active {
+  background: #292034;
+  transform: scale(0.99);
+}
+
+/* Формы */
+
+.form {
+  border-radius: 18px;
+}
+
+.form input:focus,
+.form textarea:focus,
+.form select:focus {
+  border-color: var(--purple);
+}
+
+/* Панель управления каталогом 4.7 */
+
+#adminCatalog47 {
+  background: var(--surface);
+  border-color: rgba(169, 99, 247, 0.2) !important;
+  border-radius: 18px !important;
+}
+
+#adminCatalog47 input,
+#adminCatalog47 select {
+  min-height: 46px;
+  font-size: 16px;
+}
+
+/* Нижняя навигация */
+
+.nav {
+  z-index: 50;
+  height: calc(
+    76px + env(safe-area-inset-bottom)
+  );
+  background: rgba(18, 14, 24, 0.96);
+  border-top: 1px solid rgba(169, 99, 247, 0.2);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.2);
+}
+
+.nav button {
+  min-width: 0;
+  padding: 8px 2px;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
+}
+
+.nav button span {
+  font-size: 23px;
+}
+
+.nav button.active {
+  color: #c487ff;
+  background: rgba(169, 99, 247, 0.065);
+}
+
+.nav button:active {
+  background: rgba(169, 99, 247, 0.12);
+}
+
+/* Мобильная адаптация */
+
+@media (max-width: 390px) {
+  .header {
+    padding-inline: 14px;
+  }
+
+  .page {
+    padding-inline: 14px;
+  }
+
+  .products {
+    gap: 10px;
+  }
+
+  .product-info {
+    padding: 11px;
+  }
+
+  .product-price {
+    font-size: 16px;
+  }
+
+  .nav button {
+    font-size: 9px;
+  }
+
+  .nav button span {
+    font-size: 21px;
+  }
+}
+
+/* ПК */
+
+@media (min-width: 768px) {
+  .app {
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+
+  .product:hover {
+    transform: translateY(-3px);
+    border-color: rgba(169, 99, 247, 0.45);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+  }
+
+  .product:hover .product-photo img {
+    transform: scale(1.035);
+  }
+
+  .categories button:hover,
+  .menu-row:hover {
+    border-color: var(--purple);
+  }
+}
+
+/* Уважение настроек анимации */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
